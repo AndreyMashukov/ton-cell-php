@@ -3,7 +3,8 @@
     "description": "TLB Cell / Builder / Slice / canonical BOC encoder for The Open Network in pure PHP — byte-exact equivalent of @ton/core's cell layer.",
     "type": "library",
     "license": "MIT",
-    "keywords": ["ton", "the-open-network", "tlb", "cell", "boc", "blockchain"],
+    "homepage": "https://github.com/AndreyMashukov/ton-cell-php",
+    "keywords": ["ton", "the-open-network", "tlb", "cell", "boc", "bag-of-cells", "builder", "slice", "blockchain", "pure-php"],
     "authors": [
         {
             "name": "Andrei Mashukov",
@@ -11,6 +12,10 @@
             "homepage": "https://github.com/AndreyMashukov"
         }
     ],
+    "support": {
+        "issues": "https://github.com/AndreyMashukov/ton-cell-php/issues",
+        "source": "https://github.com/AndreyMashukov/ton-cell-php"
+    },
     "require": {
         "php": ">=8.3",
         "ext-gmp": "*"

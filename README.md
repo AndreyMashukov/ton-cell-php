@@ -1,8 +1,32 @@
-# ton-cell-php
+# amashukov/ton-cell-php
 
-TLB primitives for The Open Network (TON) in pure PHP: `Cell`, `Builder`, `Slice`, and a canonical `BOC` encoder. Byte-exact equivalent of the `@ton/core` cell layer used across TON SDKs.
+Pure-PHP TLB Cell, Builder, Slice and canonical BOC encoder for The Open Network (TON) — byte-for-byte parity with `@ton/core`.
 
-## Install
+[![CI](https://img.shields.io/github/actions/workflow/status/AndreyMashukov/ton-cell-php/ci.yml?branch=main&label=CI)](https://github.com/AndreyMashukov/ton-cell-php/actions)
+[![PHPStan L9](https://img.shields.io/github/actions/workflow/status/AndreyMashukov/ton-cell-php/stan.yml?branch=main&label=PHPStan%20L9)](https://github.com/AndreyMashukov/ton-cell-php/actions)
+[![Latest Version](https://img.shields.io/packagist/v/amashukov/ton-cell-php)](https://packagist.org/packages/amashukov/ton-cell-php)
+[![Downloads](https://img.shields.io/packagist/dt/amashukov/ton-cell-php)](https://packagist.org/packages/amashukov/ton-cell-php)
+[![PHP](https://img.shields.io/packagist/dependency-v/amashukov/ton-cell-php/php)](https://packagist.org/packages/amashukov/ton-cell-php)
+[![License](https://img.shields.io/packagist/l/amashukov/ton-cell-php)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/AndreyMashukov/ton-cell-php?style=social)](https://github.com/AndreyMashukov/ton-cell-php)
+
+`amashukov/ton-cell-php` implements the TLB (Type Language - Binary) cell layer for The Open Network (TON) in pure PHP: `Cell`, `Builder`, `Slice`, and a canonical `BOC` (Bag of Cells) serializer. It is a byte-exact equivalent of the `@ton/core` cell layer used across TON SDKs, suitable for building and parsing jetton transfers, contract messages and any TLB-encoded payload from PHP.
+
+## Features
+
+- **`Builder`** — fluent cell construction: bits, unsigned/signed ints, coins, addresses, refs, string tails.
+- **`Slice`** — TLB parser mirroring the builder surface.
+- **Canonical `BOC` serializer** — emits `@ton/core` v15's canonical wire format (`has_crc32c=1`, little-endian CRC32C tail) with `offset_byte_size` auto-promotion from 1 to 2 when cell data exceeds 255 bytes.
+- **Byte-for-byte parity** with `@ton/core` v15 — validated against upstream fixtures.
+- **Big integers via `ext-gmp`** — values crossing `PHP_INT_MAX` flow in and out as decimal strings.
+- **Cell hashing** — 32-byte SHA-256 of the recursive TLB representation for Ed25519 signing and address derivation.
+- PHPStan level 9 clean, `@PER-CS` formatted, CI-tested.
+
+## Why amashukov/ton-cell-php
+
+TON SDKs are written in TypeScript (`@ton/core`) and a PHP project either shells out to Node or reimplements the cell layer ad hoc. `amashukov/ton-cell-php` gives you the cell / BOC primitives natively in PHP with byte-for-byte parity against `@ton/core` v15, so a BOC built in PHP is wire-identical to one built by the canonical SDK — no Node sidecar, no FFI.
+
+## Installation
 
 ```bash
 composer require amashukov/ton-cell-php
@@ -73,6 +97,28 @@ Bit-level reader over a binary string with a known precise bit length — useful
 - `ext-gmp`
 
 No composer dependencies.
+
+## Related packages
+
+Part of a modular pure-PHP blockchain toolkit:
+
+| Package | Purpose |
+|---|---|
+| [amashukov/ton-cell-php](https://github.com/AndreyMashukov/ton-cell-php) | TON TLB Cell / Builder / Slice / BOC |
+| [amashukov/ton-crypto-php](https://github.com/AndreyMashukov/ton-crypto-php) | TON Ed25519 / mnemonic crypto |
+| [amashukov/ton-wallet-php](https://github.com/AndreyMashukov/ton-wallet-php) | TON wallet contract tooling |
+| [amashukov/toncenter-client-php](https://github.com/AndreyMashukov/toncenter-client-php) | toncenter JSON-RPC client |
+| [amashukov/ton-php](https://github.com/AndreyMashukov/ton-php) | TON umbrella package |
+| [amashukov/keccak-php](https://github.com/AndreyMashukov/keccak-php) | Keccak-256 / SHA-3 / SHAKE hashing |
+| [amashukov/secp256k1-php](https://github.com/AndreyMashukov/secp256k1-php) | secp256k1 ECDSA sign / verify / recover |
+| [amashukov/rlp-php](https://github.com/AndreyMashukov/rlp-php) | Ethereum RLP encode / decode |
+
+## Quality
+
+- PHPStan level 9.
+- php-cs-fixer with the `@PER-CS` ruleset.
+- GitHub Actions CI on every push.
+- Byte-for-byte parity tests against `@ton/core` v15 fixtures.
 
 ## Reference
 
