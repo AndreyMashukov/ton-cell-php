@@ -55,6 +55,153 @@ final readonly class Boc
         return base64_encode(self::encode($root));
     }
 
+    public static function decodeBase64(string $b64): Cell
+    {
+        $bytes = base64_decode($b64, true);
+        if (false === $bytes) {
+            throw new RuntimeException('BOC decoder: input is not valid base64');
+        }
+
+        return self::decode($bytes);
+    }
+
+    public static function decode(string $bytes): Cell
+    {
+        $len = \strlen($bytes);
+        if ($len < 9 || self::MAGIC !== substr($bytes, 0, 4)) {
+            throw new RuntimeException('BOC decoder: bad magic / truncated header');
+        }
+
+        $flags          = \ord($bytes[4]);
+        $offsetByteSize = \ord($bytes[5]);
+        $cellCount      = \ord($bytes[6]);
+        $rootCount      = \ord($bytes[7]);
+        $refSize        = $flags & 0x07;
+        $hasCrc32c      = 0 !== (($flags >> 6) & 1);
+
+        if ($refSize < 1 || $offsetByteSize < 1) {
+            throw new RuntimeException('BOC decoder: unsupported ref_size / offset_size');
+        }
+
+        $cursor = 9 + $offsetByteSize + $rootCount * $refSize;
+        if ($cursor > $len) {
+            throw new RuntimeException('BOC decoder: header overruns buffer');
+        }
+
+        $rootIndex = $rootCount > 0 ? self::readBigEndian($bytes, 9 + $offsetByteSize, $refSize) : 0;
+
+        $payloadEnd = $hasCrc32c ? $len - 4 : $len;
+        if ($hasCrc32c && strrev(hash('crc32c', substr($bytes, 0, $payloadEnd), true)) !== substr($bytes, $payloadEnd, 4)) {
+            throw new RuntimeException('BOC decoder: CRC32C mismatch');
+        }
+
+        $descriptors = [];
+        for ($i = 0; $i < $cellCount; ++$i) {
+            if ($cursor + 2 > $payloadEnd) {
+                throw new RuntimeException('BOC decoder: descriptor overruns buffer');
+            }
+            $d1   = \ord($bytes[$cursor]);
+            $d2   = \ord($bytes[$cursor + 1]);
+            $cursor += 2;
+
+            $refs      = $d1 & 0x07;
+            $dataBytes = ($d2 >> 1) + ($d2 & 1);
+            $full      = 0 === ($d2 & 1);
+
+            if ($cursor + $dataBytes + $refs * $refSize > $payloadEnd) {
+                throw new RuntimeException('BOC decoder: cell body overruns buffer');
+            }
+            $data = substr($bytes, $cursor, $dataBytes);
+            $cursor += $dataBytes;
+
+            $refIndices = [];
+            for ($r = 0; $r < $refs; ++$r) {
+                $refIndices[] = self::readBigEndian($bytes, $cursor, $refSize);
+                $cursor += $refSize;
+            }
+
+            [$bits, $bitLength] = self::reconstructBits($data, $dataBytes, $full);
+            $descriptors[$i]    = ['bits' => $bits, 'bitLength' => $bitLength, 'refs' => $refIndices];
+        }
+
+        if ($rootIndex < 0 || $rootIndex >= $cellCount) {
+            throw new RuntimeException('BOC decoder: root index out of range');
+        }
+
+        $memo       = [];
+        $inProgress = [];
+
+        return self::buildCell($rootIndex, $descriptors, $memo, $inProgress, $cellCount);
+    }
+
+    /**
+     * @return array{0: string, 1: int}
+     */
+    private static function reconstructBits(string $data, int $dataBytes, bool $full): array
+    {
+        if ($full) {
+            return [$data, $dataBytes * 8];
+        }
+
+        $lastIdx  = $dataBytes - 1;
+        $lastByte = \ord($data[$lastIdx]);
+        $marker   = $lastByte & -$lastByte;
+        if (0 === $marker) {
+            throw new RuntimeException('BOC decoder: completion marker missing in partial cell');
+        }
+        $p         = (int) log($marker, 2);
+        $remainder = 7 - $p;
+        $bitLength = $lastIdx * 8 + $remainder;
+
+        $mask          = 0 === $remainder ? 0 : (0xFF << (8 - $remainder)) & 0xFF;
+        $data[$lastIdx] = \chr($lastByte & $mask);
+
+        return [$data, $bitLength];
+    }
+
+    private static function readBigEndian(string $bytes, int $offset, int $size): int
+    {
+        $value = 0;
+        for ($i = 0; $i < $size; ++$i) {
+            $value = ($value << 8) | \ord($bytes[$offset + $i]);
+        }
+
+        return $value;
+    }
+
+    /**
+     * @param array<int, array{bits: string, bitLength: int, refs: list<int>}> $descriptors
+     * @param array<int, Cell>                                                 $memo
+     * @param array<int, bool>                                                 $inProgress
+     */
+    private static function buildCell(int $index, array $descriptors, array &$memo, array &$inProgress, int $cellCount): Cell
+    {
+        if (isset($memo[$index])) {
+            return $memo[$index];
+        }
+        if (isset($inProgress[$index])) {
+            throw new RuntimeException('BOC decoder: cyclic ref detected');
+        }
+        if (!isset($descriptors[$index])) {
+            throw new RuntimeException('BOC decoder: ref index out of range');
+        }
+        $inProgress[$index] = true;
+
+        $descriptor = $descriptors[$index];
+        $childCells = [];
+        foreach ($descriptor['refs'] as $refIdx) {
+            if ($refIdx < 0 || $refIdx >= $cellCount) {
+                throw new RuntimeException('BOC decoder: ref index out of range');
+            }
+            $childCells[] = self::buildCell($refIdx, $descriptors, $memo, $inProgress, $cellCount);
+        }
+
+        $cell = new Cell($descriptor['bits'], $descriptor['bitLength'], new CellRefList(...$childCells));
+        unset($inProgress[$index]);
+
+        return $memo[$index] = $cell;
+    }
+
     /**
      * @param list<Cell>      $ordered
      * @param array<int, int> $indexed
